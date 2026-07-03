@@ -116,7 +116,6 @@ AI-Agent-JobFinder/
 
 GitHub: https://github.com/balaji-2316
 
-LinkedIn: *(Add your LinkedIn profile link here)*
 
 ---
 
