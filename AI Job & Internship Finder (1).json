@@ -1,0 +1,790 @@
+{
+  "name": "AI Job & Internship Finder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 16,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "caaf4b21-ef7c-4e2c-9e3b-7e71deaf5509",
+      "name": "Daily at 4:30 PM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 5
+      },
+      "id": "72f916b2-0d47-4ad8-97b2-cc65d2b617a0",
+      "name": "Merge All Job Sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        688,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobs = [];\n\nfor (const item of $input.all()) {\n  let job = {};\n  \n  if (item.json.position) {\n    job = {\n      company: item.json.company || \"Unknown\",\n      title: item.json.position || \"Unknown\",\n      location: item.json.location || \"Remote\",\n      description: item.json.description || \"\",\n      url: item.json.url || item.json.apply_url || \"\",\n      posted_date: item.json.date || new Date().toISOString(),\n      tags: item.json.tags || [],\n      source: \"RemoteOK\"\n    };\n  } else if (item.json.title && item.json.company_name) {\n    job = {\n      company: item.json.company_name || \"Unknown\",\n      title: item.json.title || \"Unknown\",\n      location: item.json.candidate_required_location || item.json.location || \"Remote\",\n      description: item.json.description || item.json.job_description || \"\",\n      url: item.json.url || \"\",\n      posted_date: item.json.publication_date || item.json.created_at ? new Date(item.json.created_at * 1000).toISOString() : new Date().toISOString(),\n      tags: item.json.tags || [],\n      source: item.json.slug ? \"Arbeitnow\" : \"Remotive\"\n    };\n  } else if (item.json.link) {\n    job = {\n      company: item.json.creator || \"Unknown\",\n      title: item.json.title || \"Unknown\",\n      location: \"Remote\",\n      description: item.json.contentSnippet || item.json.description || \"\",\n      url: item.json.link || \"\",\n      posted_date: item.json.pubDate || item.json.isoDate || new Date().toISOString(),\n      tags: [],\n      source: item.json.link.includes(\"huggingface\") ? \"HuggingFace\" : \"YCombinator\"\n    };\n  }\n  \n  if (job.company && job.title && job.url) {\n    jobs.push({ json: job });\n  }\n}\n\nreturn jobs.length > 0 ? jobs : [];"
+      },
+      "id": "6ca0bae7-d338-45e4-9554-e0cb48cf8fc8",
+      "name": "Normalize Job Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "ai_analysis",
+              "value": "={{ JSON.parse($json.message) }}",
+              "type": "object"
+            },
+            {
+              "id": "2",
+              "name": "company",
+              "value": "={{ $(\"Remove Duplicate Jobs\").item.json.company }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "title",
+              "value": "={{ $(\"Remove Duplicate Jobs\").item.json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "location",
+              "value": "={{ $(\"Remove Duplicate Jobs\").item.json.location }}",
+              "type": "string"
+            },
+            {
+              "id": "5",
+              "name": "url",
+              "value": "={{ $(\"Remove Duplicate Jobs\").item.json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "6",
+              "name": "posted_date",
+              "value": "={{ $(\"Remove Duplicate Jobs\").item.json.posted_date }}",
+              "type": "string"
+            },
+            {
+              "id": "7",
+              "name": "source",
+              "value": "={{ $(\"Remove Duplicate Jobs\").item.json.source }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8f35314b-a075-4100-a27b-b363175831dc",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2384,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ai_analysis.match_score }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "rightValue": 8
+            },
+            {
+              "leftValue": "={{ Math.abs($now.diff(DateTime.fromISO($json.posted_date), \"days\").days) }}",
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              },
+              "rightValue": 7
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "725de6c5-4276-4184-a89a-f2f6f43774bb",
+      "name": "Filter Match Score >= 8",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        2608,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "compare": "selectedFields",
+        "fieldsToCompare": "company,title",
+        "options": {}
+      },
+      "id": "fcb0c1c7-cf8f-4009-83dd-a0ceac2bb1ec",
+      "name": "Remove Duplicate Jobs",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 1.1,
+      "position": [
+        1360,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "Date",
+              "value": "={{ $now.toFormat(\"yyyy-MM-dd\") }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "Company",
+              "value": "={{ $json.company }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "Role",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "Location",
+              "value": "={{ $json.location }}",
+              "type": "string"
+            },
+            {
+              "id": "5",
+              "name": "Mode",
+              "value": "={{ $json.ai_analysis.work_mode }}",
+              "type": "string"
+            },
+            {
+              "id": "6",
+              "name": "Skills",
+              "value": "={{ $json.ai_analysis.skills.join(\", \") }}",
+              "type": "string"
+            },
+            {
+              "id": "7",
+              "name": "Match Score",
+              "value": "={{ $json.ai_analysis.match_score }}",
+              "type": "number"
+            },
+            {
+              "id": "8",
+              "name": "Apply Link",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "9",
+              "name": "Source",
+              "value": "={{ $json.source }}",
+              "type": "string"
+            },
+            {
+              "id": "10",
+              "name": "Summary",
+              "value": "={{ $json.ai_analysis.summary }}",
+              "type": "string"
+            },
+            {
+              "id": "11",
+              "name": "Fit Reason",
+              "value": "={{ $json.ai_analysis.fit_reason }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "911cc58b-02e5-47f9-bef9-1ee9cd0bf680",
+      "name": "Prepare for Storage",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2832,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "options": {}
+      },
+      "id": "cca19cd1-9570-4ffa-97d5-801ed88048de",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3056,
+        816
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "D9uDrj78FwKRmHVY",
+          "name": "Google Sheets OAuth2 API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "5914669052",
+        "text": "=🚀 *New AI Internship Found*\n\n🏢 *Company:*\n{{ $json.Company }}\n\n💼 *Role:*\n{{ $json.Role }}\n\n📍 *Location:*\n{{ $json.Location }}\n\n🌐 *Work Mode:*\n{{ $json.Mode }}\n\n⭐ *Match Score:*\n{{ $json[\"Match Score\"] }}/10\n\n🛠 *Required Skills:*\n{{ $json.Skills }}\n\n📝 *AI Summary:*\n{{ $json.Summary }}\n\n💡 *Why It Fits:*\n{{ $json[\"Fit Reason\"] }}\n\n🔗 *Apply Here:*\n{{ $json[\"Apply Link\"] }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "7218d6d4-1a23-4393-a47f-dd909df48fd2",
+      "name": "Send Telegram Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3280,
+        880
+      ],
+      "webhookId": "db2a2f82-c634-4102-b7e7-214b6dd1768e",
+      "credentials": {
+        "telegramApi": {
+          "id": "oOlMQP3gOpYGj6W3",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "total_jobs_found",
+              "value": "={{ $(\"Normalize Job Data\").all().length }}",
+              "type": "number"
+            },
+            {
+              "id": "2",
+              "name": "jobs_after_filter",
+              "value": "={{ $(\"Filter Match Score >= 8\").all().length }}",
+              "type": "number"
+            },
+            {
+              "id": "3",
+              "name": "jobs_sent",
+              "value": "={{ $input.all().length }}",
+              "type": "number"
+            },
+            {
+              "id": "4",
+              "name": "execution_date",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "23c1e803-f528-40bb-bfc1-660c670c3562",
+      "name": "Log Results",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1808,
+        624
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "https://remoteok.com/api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "43d2263c-ef86-4b5f-86b1-b8f0f653c426",
+      "name": "Fetch RemoteOK Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        400
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://remotive.com/api/remote-jobs",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "category",
+              "value": "software-dev"
+            },
+            {
+              "name": "search",
+              "value": "AI Machine Learning"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "9485ba4a-aa3b-48a5-a173-0fc4cbbb690f",
+      "name": "Fetch Remotive Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        592
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://www.arbeitnow.com/api/job-board-api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "f440b7b1-5527-4990-a561-757ac7721e2c",
+      "name": "Fetch Arbeitnow Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        784
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://huggingface.co/jobs.rss",
+        "options": {}
+      },
+      "id": "17c85dfe-552d-4cbc-a8e1-42f96a7d8c91",
+      "name": "Fetch HuggingFace RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        464,
+        976
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://www.ycombinator.com/jobs/role/software-engineer/feed",
+        "options": {}
+      },
+      "id": "e3fda124-d9cc-431d-aa56-a2439c1bf9f3",
+      "name": "Fetch YC Jobs RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        464,
+        1168
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.company }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              },
+              "rightValue": "Unknown"
+            },
+            {
+              "leftValue": "={{ $json.url }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "leftValue": "={{ $json.title.toLowerCase() }}",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              },
+              "rightValue": "ai"
+            }
+          ],
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "80b6e708-c1c2-406c-997c-c3ef697f79eb",
+      "name": "Filter Valid Jobs",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1136,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "id": "0d6b53da-3716-42a3-85de-566771f9e68d",
+      "name": "Wait Between AI Calls",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1808,
+        816
+      ],
+      "webhookId": "6bfbf042-88f4-4bee-9bab-4942adc0a08b"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Analyze this job posting for a final-year Computer Science student interested in AI and Machine Learning.\n\nCompany: {{ $json.company }}\nTitle: {{ $json.title }}\nLocation: {{ $json.location }}\nDescription: {{ $json.description }}\n\nProvide the following in JSON format:\n{\n  \"summary\": \"3-sentence summary of the job\",\n  \"skills\": [\"skill1\", \"skill2\", \"skill3\"],\n  \"salary\": \"extracted salary or empty string\",\n  \"work_mode\": \"Remote/Hybrid/Onsite\",\n  \"deadline\": \"application deadline or empty string\",\n  \"match_score\": 8,\n  \"fit_reason\": \"why this is a good fit for an AI/ML student\"\n}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "6d0e7386-d7e1-408a-b50f-b16fa3615dfa",
+      "name": "Analyze Job with Gemini",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        2032,
+        816
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "GjPScTz8neQr6wY2",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "bd313987-ba81-41fb-a289-5e2db58b3c92",
+      "name": "Batch Jobs for AI",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1584,
+        784
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily at 4:30 PM IST": {
+      "main": [
+        [
+          {
+            "node": "Fetch RemoteOK Jobs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Remotive Jobs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Arbeitnow Jobs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch HuggingFace RSS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch YC Jobs RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Job Sources": {
+      "main": [
+        [
+          {
+            "node": "Normalize Job Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Job Data": {
+      "main": [
+        [
+          {
+            "node": "Filter Valid Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Filter Match Score >= 8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Match Score >= 8": {
+      "main": [
+        [
+          {
+            "node": "Prepare for Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove Duplicate Jobs": {
+      "main": [
+        [
+          {
+            "node": "Batch Jobs for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare for Storage": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram Notification": {
+      "main": [
+        [
+          {
+            "node": "Batch Jobs for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch RemoteOK Jobs": {
+      "main": [
+        [
+          {
+            "node": "Merge All Job Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Remotive Jobs": {
+      "main": [
+        [
+          {
+            "node": "Merge All Job Sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch Arbeitnow Jobs": {
+      "main": [
+        [
+          {
+            "node": "Merge All Job Sources",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Fetch HuggingFace RSS": {
+      "main": [
+        [
+          {
+            "node": "Merge All Job Sources",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Fetch YC Jobs RSS": {
+      "main": [
+        [
+          {
+            "node": "Merge All Job Sources",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Filter Valid Jobs": {
+      "main": [
+        [
+          {
+            "node": "Remove Duplicate Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Between AI Calls": {
+      "main": [
+        [
+          {
+            "node": "Analyze Job with Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Job with Gemini": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Jobs for AI": {
+      "main": [
+        [
+          {
+            "node": "Log Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Between AI Calls",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "43998182-ca4d-48a1-a0e7-9ca3389fbf05",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a10e2d421015643499868e25951ad11477d5d80739d1e444643d04295825f7b5"
+  },
+  "nodeGroups": [],
+  "id": "rASKx7gfCKWdQiEC",
+  "tags": []
+}
